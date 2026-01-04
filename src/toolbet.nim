@@ -2,7 +2,7 @@ import std/[json, tables, typetraits, macros, jsonutils, sequtils, sugar, loggin
 
 import pkg/jaysonrpc
 
-import ./[utils, types, logging, hooks]
+import ./toolbet/[utils, types, logging, hooks]
 
 
 type
@@ -20,7 +20,7 @@ type
     handler: ToolHandler
 
   MCP = ref object
-    name, title, version: string
+    name, title, version, instructions: string
 
     tools: Table[string, Tool]
     exec: Executor[JsonNode, void]
@@ -40,8 +40,8 @@ proc fromJsonHook(info: var Info, data: JsonNode) =
   if "title" in data:
     info.title.fromJson(data["title"])
 
-proc initMCP(name, title, version: string): MCP =
-  let mcp = MCP(name: name, title: title, version: version, exec: initExecutor[JsonNode, void]())
+proc initMCP(name, title, version, instructions: string): MCP =
+  let mcp = MCP(name: name, title: title, version: version, instructions: instructions, exec: initExecutor[JsonNode, void]())
 
   mcp.exec.on("tools/list") do () -> tuple[tools: seq[Tool]]:
     debug "Returning tools " & $toSeq(mcp.tools.values())
@@ -60,7 +60,7 @@ proc initMCP(name, title, version: string): MCP =
       }
     }
     result.serverInfo = Info(title: some name, name: name, version: version)
-    result.instructions = "Call me when you need the weather"
+    result.instructions = instructions
 
   mcp.exec.on("tools/call") do (ctx: ToolContext, name: string, arguments: Table[string, JsonNode]) -> CallToolResult:
     let meth = mcp.tools[name].handler
@@ -90,7 +90,7 @@ proc wrapProc(prc: proc): ToolHandler =
       when type(field) is Context:
         field = ctx
       else:
-        field.fromJson(data[name])
+        field.fromJson(arguments[name])
 
     # Call the original function
     result = prc.call(args).toJson()
@@ -121,7 +121,7 @@ proc add(mcp: var MCP, name, title, description: string, tool: proc) =
     title: title,
     description: description,
     handler: wrapProc(tool),
-    inputSchema: %* {"type": "object"},
+    inputSchema: generateSchema(createNamedTuple(tool)),
     outputSchema: generateSchema(returnType(tool))
   )
 
@@ -133,15 +133,10 @@ template add(mcp: var MCP, name, title: string, tool: proc) =
     tool
   )
 
-var mcp = initMCP("WeatherService", "Weather Service", "Gets weather information for a location")
-
-mcp.add("getWeather", "Get Weather") do () -> tuple[msg: string]:
-  ## Returns the weather for the users current location (Don't worry, we know it)
-  debug "Returning the weather..."
-  return (msg: "The weather is cloudy with a chance of meat balls")
-
-proc start(mcp: MCP) =
+proc start*(mcp: MCP) =
   info("Starting...")
+  addHandler(newMCPLogger())
+
   while true:
     let json = stdin.readline()
     debug("Got request: " & json)
@@ -156,7 +151,67 @@ proc start(mcp: MCP) =
     else:
       debug "No response needed"
 
-addHandler(newMCPLogger())
-addHandler(newFileLogger("/tmp/toolbelt.log", mode=fmWrite))
+when isMainModule:
+  var mcp = initMCP(
+    "ODBC",
+    "ODBC connection",
+    "ODBC multiplexer for interacting with mutliple databases",
+    """
+    Use the `listDatabases` tool to get all the available connections, then use that connection when going forward
+    """
+  )
 
-mcp.start()
+  import db_connector/odbcsql
+
+  type DBHandle = ref object
+    typ: TSqlSmallInt
+    data: SqlHandle
+
+  proc `=destroy`(handle: var typeof(DBHandle()[])) =
+    if handle.data != nil:
+      discard SQLFreeHandle(handle.typ, handle.data)
+      handle.data = nil
+
+  proc checkDB(handle: DBHandle, ret: TSqlSmallInt) =
+    if ret != SQL_SUCCESS:
+      echo ret
+      var
+        stateBuffer = newString(6)
+        msgBuffer = newString(4096)
+        nativeError: TSqlInteger
+        msgLength: TSqlSmallInt
+      discard SQLGetDiagRec(handle.typ, handle.data, 1, addr stateBuffer[0], nativeError, addr msgBuffer[0], TSqlSmallInt(msgBuffer.len), msgLength)
+      msgBuffer.setLen(msgLength)
+      echo nativeError
+      raise (ref CatchableError)(msg: msgBuffer)
+
+  type
+    ConnectionMeta = object
+      name, description: string
+  proc initHandle(typ: TSqlSmallInt): DBHandle =
+    result = DBHandle(typ: typ, data: nil)
+    result.checkDB SQLAllocHandle(typ, SQL_NULL_HANDLE, result.data)
+    # Set ODBC version for environment handles
+    if typ == SQL_HANDLE_ENV:
+      result.checkDB SQLSetEnvAttr(result.data, SQL_ATTR_ODBC_VERSION, cast[SqlPointer](SQL_OV_ODBC3), SQL_IS_INTEGER)
+
+  iterator dataSources(): ConnectionMeta =
+    let env = initHandle(SQL_HANDLE_ENV)
+    var nameBuffer = newString(SQL_MAX_DSN_LENGTH + 1)
+    var nameLength: TSqlSmallInt
+    var description = newString(255)
+    var descriptionLength: TSqlSmallInt
+    while true:
+      let ret = SQLDataSources(env.data, SQL_FETCH_FIRST, addr nameBuffer[0], TSqlSmallInt(nameBuffer.len), addr nameLength, addr description[0], TSqlSmallInt(description.len), addr descriptionLength)
+      echo ret
+      if ret == SQL_NO_DATA: break
+      env.checkDB ret
+      yield ConnectionMeta(name: nameBuffer, description: description)
+
+  for source in dataSources():
+    echo source
+  # mcp.add("listDatabases", "Get databases") do () -> list[string]:
+  #   ## Returns list of all configured database connections
+  #   debug "Returning the weather..."
+  #   return (msg: "The weather is cloudy with a chance of meat balls")
+  # mcp.start()
