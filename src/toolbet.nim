@@ -2,11 +2,12 @@ import std/[json, tables, typetraits, macros, jsonutils, sequtils, sugar, loggin
 
 import pkg/jaysonrpc
 
-import ./[utils, types]
+import ./[utils, types, logging, hooks]
 
 
 type
-  ToolHandler = proc (ctx: Context, arguments: Table[string, JsonNode]): JsonNode
+  ToolContext = Context[void]
+  ToolHandler = proc (ctx: ToolContext, arguments: Table[string, JsonNode]): JsonNode
   Tool  = object
     name: string
       ## This is the machine name e.g. get_weather
@@ -22,7 +23,7 @@ type
     name, title, version: string
 
     tools: Table[string, Tool]
-    exec: Executor[JsonNode]
+    exec: Executor[JsonNode, void]
 
 proc toJsonHook(tool: Tool): JsonNode =
   result = %*{
@@ -40,7 +41,8 @@ proc fromJsonHook(info: var Info, data: JsonNode) =
     info.title.fromJson(data["title"])
 
 proc initMCP(name, title, version: string): MCP =
-  let mcp = MCP(name: name, title: title, version: version, exec: initExecutor[JsonNode]())
+  let mcp = MCP(name: name, title: title, version: version, exec: initExecutor[JsonNode, void]())
+
   mcp.exec.on("tools/list") do () -> tuple[tools: seq[Tool]]:
     debug "Returning tools " & $toSeq(mcp.tools.values())
     return (tools: toSeq(mcp.tools.values()))
@@ -53,27 +55,35 @@ proc initMCP(name, title, version: string): MCP =
     result = default(ServerCapabilities)
     result.capabilities = %* {
       "tools": {
-        "listChanged": false
+        "listChanged": false,
+        "logging": {}
       }
     }
-    result.serverInfo = Info(name: name, version: version)
+    result.serverInfo = Info(title: some name, name: name, version: version)
     result.instructions = "Call me when you need the weather"
 
-  mcp.exec.on("tools/call") do (ctx: Context, name: string, arguments: Table[string, JsonNode]) -> CallToolResult:
+  mcp.exec.on("tools/call") do (ctx: ToolContext, name: string, arguments: Table[string, JsonNode]) -> CallToolResult:
     let meth = mcp.tools[name].handler
-    return CallToolResult(
+    let res = meth(ctx, arguments)
+    result = CallToolResult(
       content: @[
-        ContentBlock(`type`: "text", text: meth(ctx, arguments).pretty())
-      ]
+        ContentBlock(`type`: Text, text: res.pretty())
+      ],
+      structuredContent: res
     )
+    debug $result
 
   mcp.exec.on("notifications/initialized") do ():
     info("Client is ready")
 
+  mcp.exec.on("notifications/cancelled") do (requestId: JsonNode, reason: string, ctx: ToolContext):
+    info(fmt"Cancelling request {requestId} because {reason}")
+    ctx.cancel(requestId)
+
   return mcp
 
 proc wrapProc(prc: proc): ToolHandler =
-  proc (ctx: Context, arguments: Table[string, JsonNode]): JsonNode =
+  proc (ctx: ToolContext, arguments: Table[string, JsonNode]): JsonNode =
     # Parse everything into the args
     var args = default(createNamedTuple(prc))
     for name, field in args.fieldPairs:
@@ -84,7 +94,6 @@ proc wrapProc(prc: proc): ToolHandler =
 
     # Call the original function
     result = prc.call(args).toJson()
-    debug result.pretty()
 
 macro getDescription(tool: typed): string =
   let impl = if tool.kind == nnkSym: tool.getImpl() else: tool
@@ -93,14 +102,27 @@ macro getDescription(tool: typed): string =
   else:
     return newLit $impl[^2].extractDocCommentsAndRunnables()[0]
 
+proc generateSchema(typ: typedesc[string]): JsonNode =
+  return %* {"type": "string"}
+
+proc generateSchema(typ: typedesc[tuple]): JsonNode =
+  result = %* {"type": "object", "required": [], "properties": {}}
+  for field, val in default(typ).fieldPairs():
+    result["properties"][field] = generateSchema(typeof(val))
+    result["required"] &= %field
+
+macro returnType(x: proc): typedesc =
+  result = x.getTypeImpl()[0][0]
+  echo result.treeRepr
+
 proc add(mcp: var MCP, name, title, description: string, tool: proc) =
   mcp.tools[name] = Tool(
     name: name,
     title: title,
     description: description,
     handler: wrapProc(tool),
-    inputSchema: newJObject(),
-    outputSchema: %* {"type": "string", "description": "Weather for the current location"}
+    inputSchema: %* {"type": "object"},
+    outputSchema: generateSchema(returnType(tool))
   )
 
 template add(mcp: var MCP, name, title: string, tool: proc) =
@@ -113,10 +135,10 @@ template add(mcp: var MCP, name, title: string, tool: proc) =
 
 var mcp = initMCP("WeatherService", "Weather Service", "Gets weather information for a location")
 
-mcp.add("getWeather", "Get Weather") do () -> string:
+mcp.add("getWeather", "Get Weather") do () -> tuple[msg: string]:
   ## Returns the weather for the users current location (Don't worry, we know it)
-  debug "Returning the weather"
-  return "The weather is cloudy with a chance of meat balls"
+  debug "Returning the weather..."
+  return (msg: "The weather is cloudy with a chance of meat balls")
 
 proc start(mcp: MCP) =
   info("Starting...")
@@ -133,7 +155,8 @@ proc start(mcp: MCP) =
       echo resp.get()
     else:
       debug "No response needed"
-addHandler(newConsoleLogger())
+
+addHandler(newMCPLogger())
 addHandler(newFileLogger("/tmp/toolbelt.log", mode=fmWrite))
 
 mcp.start()

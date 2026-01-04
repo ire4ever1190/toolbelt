@@ -11,4 +11,4 @@ bin           = @["toolbet"]
 # Dependencies
 
 requires "nim >= 2.0.0"
-requires "gh:ire4ever1190/jaysonrpc#75fc3ed"
+requires "gh:ire4ever1190/jaysonrpc#0f1f4fc"

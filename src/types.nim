@@ -21,15 +21,15 @@ type
     data, mimetype: string
 
   ContentBlock* = object
-    case `type`: ContentType
+    case `type`*: ContentType
     of Text:
-      text*: (string,)
+      text*: string
     of Image, Audio:
-      data: tuple[data, mimetype: string]
+      data*: tuple[data, mimetype: string]
     of ResourceLink:
-      link: tuple[uri: Uri, name, description, mimeType: string]
+      link*: tuple[uri: Uri, name, description, mimeType: string]
     of Resource:
-      embed: tuple[uri: Uri, name, title, mimeType, text: string]
+      embed*: tuple[uri: Uri, name, title, mimeType, text: string]
 
   CallToolResult* = object
     content*: seq[ContentBlock]

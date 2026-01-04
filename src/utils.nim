@@ -1,4 +1,4 @@
-import std/macros
+import std/[macros, json]
 
 macro createNamedTuple*(prc: proc): untyped =
   ## Takes in the NimNode for a proc type and returns a named tuple to
@@ -13,3 +13,9 @@ macro createNamedTuple*(prc: proc): untyped =
     # We need to desym the params
     tupleType &= newIdentDefs(ident param[0].strVal, param[1])
   tupleType
+
+
+proc update*(res: var JsonNode, value: JsonNode) =
+  ## Merges keys rom `value` into `res`
+  for key in value.keys():
+    res[key] = value[key]
