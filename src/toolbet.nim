@@ -75,7 +75,7 @@ proc initMCP*(name, title, version, instructions: string): MCP =
     result.serverInfo = Info(title: some name, name: name, version: version)
     result.instructions = instructions
 
-  mcp.exec.on("tools/call") do (ctx: ToolContext, name: string, arguments: Table[string, JsonNode], `_meta`: Option[JsonNode]) -> CallToolResult:
+  mcp.exec.on("tools/call") do (ctx: ToolContext, name: string, arguments: Table[string, JsonNode]) -> CallToolResult:
     let meth = mcp.tools[name].handler
     let res = meth(ctx, arguments)
     result = CallToolResult(
@@ -116,6 +116,7 @@ proc wrapProc(prc: proc): ToolHandler =
 macro getDescription(tool: typed): string =
   let impl = if tool.kind == nnkSym: tool.getImpl() else: tool
   echo impl.treeRepr
+  echo "Doocs: ", $impl[^2].extractDocCommentsAndRunnables()[0]
   if impl.kind == nnkProcDef:
     return newLit impl[^1].strVal
   else:
