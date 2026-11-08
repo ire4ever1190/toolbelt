@@ -100,7 +100,7 @@ proc wrapProc(prc: proc): ToolHandler =
     # Parse everything into the args
     var args = default(createNamedTuple(prc))
     for name, field in args.fieldPairs:
-      when type(field) is Context:
+      when type(field) is jaysonrpc.Context:
         field = ctx
       else:
         field.fromJson(data[name])
