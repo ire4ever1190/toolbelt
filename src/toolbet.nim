@@ -2,7 +2,7 @@ import std/[json, tables, typetraits, macros, jsonutils, sequtils, sugar, loggin
 
 import pkg/[jaysonrpc, casserole]
 
-import ./[utils, types, mcpLogging, hooks]
+import ./[utils, types, mcpLogging, hooks, schema]
 
 import mike/app
 import mike
@@ -119,22 +119,6 @@ macro getDescription(tool: typed): string =
     return newLit impl[^1].strVal
   else:
     return newLit $impl[^2].extractDocCommentsAndRunnables()[0]
-
-proc generateSchema*(typ: typedesc[string]): JsonNode =
-  return %* {"type": "string"}
-
-proc generateSchema*(typ: typedesc[SomeFloat]): JsonNode =
-  return %* {"type": "number"}
-
-proc generateSchema*(typ: typedesc[tuple | object]): JsonNode =
-  result = %* {
-    "type": "object",
-    "required": [],
-    "properties": {}
-  }
-  for field, val in default(typ).fieldPairs():
-    result["properties"][field] = generateSchema(typeof(val))
-    result["required"] &= %field
 
 macro returnType(x: proc): typedesc =
   result = x.getTypeImpl()[0][0]
