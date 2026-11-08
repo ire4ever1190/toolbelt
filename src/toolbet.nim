@@ -103,7 +103,7 @@ proc wrapProc(prc: proc): ToolHandler =
       when type(field) is jaysonrpc.Context:
         field = ctx
       else:
-        field.fromJson(data[name])
+        field.fromJson(arguments[name])
 
     # Call the original function
     result = prc.call(args).toJson()
