@@ -1,4 +1,4 @@
-import std/[unittest, json]
+import std/[unittest, json, options]
 
 import schema
 
@@ -11,4 +11,10 @@ suite "Schema":
         C = "c"
     check generateSchema(Options) == %* {
       "enum": ["a", "b", "c"]
+    }
+  test "Tuple with optional":
+    check generateSchema(tuple[x: Option[string]]) == %* {
+      "type": "object",
+      "required": [],
+      "properties": {"x": {"type": "string"}}
     }

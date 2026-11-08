@@ -31,9 +31,11 @@ proc generateSchema*(typ: typedesc[tuple | object]): JsonNode =
     "properties": {}
   }
   for field, val in default(typ).fieldPairs():
-    result["properties"][field] = generateSchema(typeof(val))
     when typeof(val) isnot Option:
+      result["properties"][field] = generateSchema(typeof(val))
       result["required"] &= %field
+    else:
+      result["properties"][field] = generateSchema(typeof(val.T))
 
 proc generateSchema*[T](typ: typedesc[seq[T]]): JsonNode =
   return %* {
