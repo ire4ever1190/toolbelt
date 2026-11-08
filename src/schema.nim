@@ -21,6 +21,9 @@ proc generateSchema*(typ: typedesc[bool]): JsonNode =
 proc generateSchema*(typ: typedesc[enum]): JsonNode =
   result = %* {"enum": typ.toSeq()}
 
+proc generateSchema*(typ: typedesc[JsonNode]): JsonNode =
+  result = %* {} # Any type
+
 proc generateSchema*(typ: typedesc[tuple | object]): JsonNode =
   result = %* {
     "type": "object",
