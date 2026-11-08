@@ -2,7 +2,7 @@ import std/[json, tables, typetraits, macros, jsonutils, sequtils, sugar, loggin
 
 import pkg/[jaysonrpc, casserole]
 
-import ./[utils, types, mcpLogging, hooks, openweather]
+import ./[utils, types, mcpLogging, hooks]
 
 import mike/app
 import mike
@@ -73,7 +73,7 @@ proc initMCP*(name, title, version, instructions: string): MCP =
       }
     }
     result.serverInfo = Info(title: some name, name: name, version: version)
-    result.instructions = "Call me when you need the weather"
+    result.instructions = instructions
 
   mcp.exec.on("tools/call") do (ctx: ToolContext, name: string, arguments: Table[string, JsonNode]) -> CallToolResult:
     let meth = mcp.tools[name].handler
