@@ -2,3 +2,5 @@ nimble.develop
 nimble.paths
 nimbledeps
 .crush
+.env
+.pi/agent/

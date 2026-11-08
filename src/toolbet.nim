@@ -2,11 +2,11 @@ import std/[json, tables, typetraits, macros, jsonutils, sequtils, sugar, loggin
 
 import pkg/jaysonrpc
 
-import ./[utils, types, logging, hooks]
+import ./[utils, types, logging, hooks, openweather]
 
 
 type
-  ToolContext = Context[void]
+  ToolContext = Context[MCP]
   ToolHandler = proc (ctx: ToolContext, arguments: Table[string, JsonNode]): JsonNode
   Tool  = object
     name: string
@@ -21,9 +21,9 @@ type
 
   MCP = ref object
     name, title, version: string
-
+    instructions: string
     tools: Table[string, Tool]
-    exec: Executor[JsonNode, void]
+    exec: Executor[JsonNode, MCP]
 
 proc toJsonHook(tool: Tool): JsonNode =
   result = %*{
@@ -40,8 +40,8 @@ proc fromJsonHook(info: var Info, data: JsonNode) =
   if "title" in data:
     info.title.fromJson(data["title"])
 
-proc initMCP(name, title, version: string): MCP =
-  let mcp = MCP(name: name, title: title, version: version, exec: initExecutor[JsonNode, void]())
+proc initMCP(name, title, version, instructions: string): MCP =
+  let mcp = MCP(name: name, title: title, version: version, exec: initExecutor[JsonNode, MCP](), instructions: instructions)
 
   mcp.exec.on("tools/list") do () -> tuple[tools: seq[Tool]]:
     debug "Returning tools " & $toSeq(mcp.tools.values())
@@ -50,9 +50,18 @@ proc initMCP(name, title, version: string): MCP =
   mcp.exec.on("ping") do () -> JsonNode:
     newJObject()
 
-  mcp.exec.on("initialize") do (protocolVersion: string, capabilities: JsonNode, clientInfo: Info) -> ServerCapabilities:
+  mcp.exec.on("server/discover") do () -> DiscoverResult:
+    result = DiscoverResult(
+      resultType: "complete",
+      supportedVersions: @["2026-07-28"],
+      capabilities: ServerCapabilities(tools: some((listChanged: false))),
+      instructions: mcp.instructions
+    )
+
+  # Support the old initialize method
+  mcp.exec.on("initialize") do (protocolVersion: string, capabilities: JsonNode, clientInfo: Info) -> StatefulServerCapabilities:
     info(fmt"Client {clientInfo.name} connected")
-    result = default(ServerCapabilities)
+    result = default(StatefulServerCapabilities)
     result.capabilities = %* {
       "tools": {
         "listChanged": false,
@@ -95,6 +104,11 @@ proc wrapProc(prc: proc): ToolHandler =
     # Call the original function
     result = prc.call(args).toJson()
 
+    # Attach metadata fields
+    result["_meta"] = %*{
+      "io.modelcontextprotocol/serverInfo": Info(title: some ctx.data.name, name: ctx.data.name, version: ctx.data.version)
+    }
+
 macro getDescription(tool: typed): string =
   let impl = if tool.kind == nnkSym: tool.getImpl() else: tool
   if impl.kind == nnkProcDef:
@@ -105,8 +119,15 @@ macro getDescription(tool: typed): string =
 proc generateSchema(typ: typedesc[string]): JsonNode =
   return %* {"type": "string"}
 
-proc generateSchema(typ: typedesc[tuple]): JsonNode =
-  result = %* {"type": "object", "required": [], "properties": {}}
+proc generateSchema(typ: typedesc[SomeFloat]): JsonNode =
+  return %* {"type": "number"}
+
+proc generateSchema(typ: typedesc[tuple | object]): JsonNode =
+  result = %* {
+    "type": "object",
+    "required": [],
+    "properties": {}
+  }
   for field, val in default(typ).fieldPairs():
     result["properties"][field] = generateSchema(typeof(val))
     result["required"] &= %field
@@ -121,7 +142,7 @@ proc add(mcp: var MCP, name, title, description: string, tool: proc) =
     title: title,
     description: description,
     handler: wrapProc(tool),
-    inputSchema: %* {"type": "object"},
+    inputSchema: generateSchema(createNamedTuple(tool)),
     outputSchema: generateSchema(returnType(tool))
   )
 
@@ -133,19 +154,24 @@ template add(mcp: var MCP, name, title: string, tool: proc) =
     tool
   )
 
-var mcp = initMCP("WeatherService", "Weather Service", "Gets weather information for a location")
+var mcp = initMCP(
+  "WeatherService",
+  "Weather Service",
+  "Gets weather information for a location",
+  "Call when you need to get the weather"
+)
 
-mcp.add("getWeather", "Get Weather") do () -> tuple[msg: string]:
+mcp.add("getWeather", "Get Weather") do () -> Weather:
   ## Returns the weather for the users current location (Don't worry, we know it)
   debug "Returning the weather..."
-  return (msg: "The weather is cloudy with a chance of meat balls")
+  return getWeather()
 
 proc start(mcp: MCP) =
   info("Starting...")
   while true:
     let json = stdin.readline()
     debug("Got request: " & json)
-    let calls = mcp.exec.getCalls(json)
+    let calls = mcp.exec.getCalls(json, mcp)
     let responses = collect:
       for call in calls:
         call()
@@ -157,6 +183,6 @@ proc start(mcp: MCP) =
       debug "No response needed"
 
 addHandler(newMCPLogger())
-addHandler(newFileLogger("/tmp/toolbelt.log", mode=fmWrite))
+addHandler(newConsoleLogger())
 
 mcp.start()

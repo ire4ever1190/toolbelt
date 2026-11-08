@@ -5,10 +5,19 @@ type
     name*, version*: string
     title*: Option[string]
   ServerCapabilities* = object
+    tools*: Option[tuple[listChanged: bool]]
+
+  StatefulServerCapabilities* = object
     protocolVersion* = "2025-06-18"
     capabilities*: JsonNode
     serverInfo*: Info
     instructions*: string
+
+  DiscoverResult* = object
+    resultType* = "complete"
+    instructions*: string
+    supportedVersions*: seq[string]
+    capabilities*: ServerCapabilities
 
   ContentType* = enum
     Text = "text" ## https://modelcontextprotocol.io/specification/2025-06-18/server/tools#text-content
