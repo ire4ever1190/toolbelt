@@ -3,4 +3,4 @@ nimble.paths
 nimbledeps
 .crush
 .env
-.pi/agent/
+.pi

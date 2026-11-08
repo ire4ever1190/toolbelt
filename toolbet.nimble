@@ -5,8 +5,6 @@ author        = "Jake Leahy"
 description   = "MCP library"
 license       = "MIT"
 srcDir        = "src"
-bin           = @["weather"]
-
 
 # Dependencies
 
