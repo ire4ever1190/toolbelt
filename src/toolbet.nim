@@ -1,12 +1,16 @@
 import std/[json, tables, typetraits, macros, jsonutils, sequtils, sugar, logging, strformat, options]
 
-import pkg/jaysonrpc
+import pkg/[jaysonrpc, casserole]
 
-import ./[utils, types, logging, hooks, openweather]
+import ./[utils, types, mcpLogging, hooks, openweather]
 
+import mike/app
+import mike
+
+export jaysonrpc, json
 
 type
-  ToolContext = Context[MCP]
+  ToolContext = jaysonrpc.Context[MCP]
   ToolHandler = proc (ctx: ToolContext, arguments: Table[string, JsonNode]): JsonNode
   Tool  = object
     name: string
@@ -40,7 +44,7 @@ proc fromJsonHook(info: var Info, data: JsonNode) =
   if "title" in data:
     info.title.fromJson(data["title"])
 
-proc initMCP(name, title, version, instructions: string): MCP =
+proc initMCP*(name, title, version, instructions: string): MCP =
   let mcp = MCP(name: name, title: title, version: version, exec: initExecutor[JsonNode, MCP](), instructions: instructions)
 
   mcp.exec.on("tools/list") do () -> tuple[tools: seq[Tool]]:
@@ -116,13 +120,13 @@ macro getDescription(tool: typed): string =
   else:
     return newLit $impl[^2].extractDocCommentsAndRunnables()[0]
 
-proc generateSchema(typ: typedesc[string]): JsonNode =
+proc generateSchema*(typ: typedesc[string]): JsonNode =
   return %* {"type": "string"}
 
-proc generateSchema(typ: typedesc[SomeFloat]): JsonNode =
+proc generateSchema*(typ: typedesc[SomeFloat]): JsonNode =
   return %* {"type": "number"}
 
-proc generateSchema(typ: typedesc[tuple | object]): JsonNode =
+proc generateSchema*(typ: typedesc[tuple | object]): JsonNode =
   result = %* {
     "type": "object",
     "required": [],
@@ -136,7 +140,7 @@ macro returnType(x: proc): typedesc =
   result = x.getTypeImpl()[0][0]
   echo result.treeRepr
 
-proc add(mcp: var MCP, name, title, description: string, tool: proc) =
+proc add*(mcp: var MCP, name, title, description: string, tool: proc) =
   mcp.tools[name] = Tool(
     name: name,
     title: title,
@@ -146,7 +150,7 @@ proc add(mcp: var MCP, name, title, description: string, tool: proc) =
     outputSchema: generateSchema(returnType(tool))
   )
 
-template add(mcp: var MCP, name, title: string, tool: proc) =
+template add*(mcp: var MCP, name, title: string, tool: proc) =
   mcp.add(
     name,
     title,
@@ -154,19 +158,10 @@ template add(mcp: var MCP, name, title: string, tool: proc) =
     tool
   )
 
-var mcp = initMCP(
-  "WeatherService",
-  "Weather Service",
-  "Gets weather information for a location",
-  "Call when you need to get the weather"
-)
 
-mcp.add("getWeather", "Get Weather") do () -> Weather:
-  ## Returns the weather for the users current location (Don't worry, we know it)
-  debug "Returning the weather..."
-  return getWeather()
 
-proc start(mcp: MCP) =
+proc startStdio*(mcp: MCP) =
+  ## Starts MCP over stdio
   info("Starting...")
   while true:
     let json = stdin.readline()
@@ -182,7 +177,13 @@ proc start(mcp: MCP) =
     else:
       debug "No response needed"
 
-addHandler(newMCPLogger())
-addHandler(newConsoleLogger())
-
-mcp.start()
+proc use*(app: var App, mcp: MCP, path: static[string] = "/mcp") =
+  ## Adds a MCP server to mike
+  app.post(path) do (body: Payload[string], ctx: mike.Context) -> JsonNode:
+    let calls = mcp.exec.getCalls(body, mcp)
+    let responses = collect:
+      for call in calls:
+        call()
+    if Some(resp) ?== calls.dump(responses):
+      return resp.parseJson()
+    return %* {}
