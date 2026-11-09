@@ -22,6 +22,6 @@ suite "Schema":
   test "Defaults":
     check generateSchema(tuple[x: string = "hello"]) == %* {
       "type": "object",
-      "required": ["x"],
+      "required": [],
       "properties": {"x": {"type": "string", "default": "hello"}}
     }

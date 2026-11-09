@@ -36,7 +36,7 @@ proc generateSchema*(typ: typedesc[tuple | object]): JsonNode =
       result["properties"][field] = generateSchema(typeof(val))
       result["required"] &= %field
     else:
-      result["properties"][field] = generateSchema(typeof(val.T))
+      result["properties"][field] = generateSchema(typeof(when val is Option: val.T else: val))
     when val.hasDefaultValue():
       result["properties"][field]["default"] = %val
 
