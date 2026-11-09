@@ -115,12 +115,8 @@ proc wrapProc(prc: proc): ToolHandler =
 
 macro getDescription(tool: typed): string =
   let impl = if tool.kind == nnkSym: tool.getImpl() else: tool
-  echo impl.treeRepr
-  echo "Doocs: ", $impl[^2].extractDocCommentsAndRunnables()[0]
-  if impl.kind == nnkProcDef:
-    return newLit impl[^1].strVal
-  else:
-    return newLit $impl[^2].extractDocCommentsAndRunnables()[0]
+  let body = if impl.kind == nnkProcDef: impl.body else: impl[^2]
+  return newLit $body.extractDocCommentsAndRunnables()[0]
 
 macro returnType(x: proc): typedesc =
   result = x.getTypeImpl()[0][0]
