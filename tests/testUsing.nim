@@ -18,3 +18,6 @@ proc separateFunc(a, b: int): int =
   return a * b
 
 mcp.add("product", "Multiply two numbers", separateFunc)
+
+mcp.add("identity", "Returns itself") do (a = 0) -> int:
+  return a

@@ -118,7 +118,8 @@ proc wrapProc(prc: proc): ToolHandler =
 macro getDescription(tool: typed): string =
   let impl = if tool.kind == nnkSym: tool.getImpl() else: tool
   let body = if impl.kind == nnkProcDef: impl.body else: impl[^2]
-  return newLit $body.extractDocCommentsAndRunnables()[0]
+  let docs = body.extractDocCommentsAndRunnables()
+  newLit if docs.len == 0: "" else: $docs[0]
 
 macro returnType(x: proc): typedesc =
   result = x.getTypeImpl()[0][0]

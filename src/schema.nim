@@ -1,4 +1,5 @@
 import std/[json, options, tables, enumutils, sequtils]
+import pkg/libdump
 
 # All container types first
 proc generateSchema*[T](typ: typedesc[seq[T]]): JsonNode
@@ -36,6 +37,8 @@ proc generateSchema*(typ: typedesc[tuple | object]): JsonNode =
       result["required"] &= %field
     else:
       result["properties"][field] = generateSchema(typeof(val.T))
+    when val.hasDefaultValue():
+      result["properties"][field]["default"] = %val
 
 proc generateSchema*[T](typ: typedesc[seq[T]]): JsonNode =
   return %* {

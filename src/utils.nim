@@ -11,7 +11,7 @@ macro createNamedTuple*(prc: proc): untyped =
   let tupleType = nnkTupleTy.newTree()
   for param in params:
     # We need to desym the params
-    tupleType &= newIdentDefs(ident param[0].strVal, param[1])
+    tupleType &= newIdentDefs(ident param[0].strVal, param[1], param[2])
   tupleType
 
 
