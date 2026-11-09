@@ -16,7 +16,14 @@ suite "Schema":
     check generateSchema(tuple[x: Option[string]]) == %* {
       "type": "object",
       "required": [],
-      "properties": {"x": {"type": "string"}}
+      "properties": {"x":
+        {
+          "oneOf": [
+            {"type": "string"},
+            {"type": "null"}
+          ]
+        }
+      }
     }
 
   test "Defaults":
