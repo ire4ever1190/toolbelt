@@ -1,6 +1,6 @@
 import std/[json, tables, typetraits, macros, jsonutils, sequtils, sugar, logging, strformat, options]
 
-import pkg/[jaysonrpc, casserole]
+import pkg/[jaysonrpc, casserole, libdump]
 
 import ./[utils, types, mcpLogging, hooks, schema]
 
@@ -103,7 +103,9 @@ proc wrapProc(prc: proc): ToolHandler =
       when type(field) is jaysonrpc.Context:
         field = ctx
       else:
-        field.fromJson(arguments[name])
+        const optional = type(field) is Option or field.hasDefaultValue()
+        if not optional or name in arguments: # optional -> hasKey
+          field.fromJson(arguments[name])
 
     # Call the original function
     result = prc.call(args).toJson()
