@@ -108,7 +108,8 @@ proc wrapProc(prc: proc): ToolHandler =
           field.fromJson(arguments[name])
 
     # Call the original function
-    result = prc.call(args).toJson()
+    mixin toJson, toJsonHook
+    result = toJson(prc.call(args))
 
     # Attach metadata fields
     result["_meta"] = %*{
