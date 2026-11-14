@@ -23,6 +23,8 @@ type
     outputSchema: JsonNode
     handler: ToolHandler
 
+  ResourceProducer = proc (): Resource
+
   MCP = ref object
     name, title, version: string
     instructions: string

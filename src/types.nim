@@ -29,6 +29,13 @@ type
   AudioVisual = object
     data, mimetype: string
 
+  Resource* = object
+    ## https://modelcontextprotocol.io/specification/2026-07-28/server/resources#data-types
+    uri*: string,
+    name*, title*, description*: string
+    mimeType*: Option[string]
+    text*: string
+
   ContentBlock* = object
     case `type`*: ContentType
     of Text:

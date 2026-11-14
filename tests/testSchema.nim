@@ -12,6 +12,7 @@ suite "Schema":
     check generateSchema(Options) == %* {
       "enum": ["a", "b", "c"]
     }
+
   test "Tuple with optional":
     check generateSchema(tuple[x: Option[string]]) == %* {
       "type": "object",

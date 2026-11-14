@@ -9,6 +9,7 @@ srcDir        = "src"
 # Dependencies
 
 requires "nim >= 2.0.0"
-requires "gh:ire4ever1190/jaysonrpc#0f1f4fc"
+requires "gh:ire4ever1190/jaysonrpc >= 0.7.0"
 requires "gh:ire4ever1190/mike#684a1eb"
 requires "gh:ire4ever1190/libdump >= 0.6.0"
+requires "gh:ire4ever1190/nort >= 0.6.2"
