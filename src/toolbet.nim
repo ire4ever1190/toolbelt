@@ -7,7 +7,7 @@ import ./[utils, types, mcpLogging, hooks, schema]
 import mike/app
 import mike
 
-export jaysonrpc, json
+export jaysonrpc, json, schema
 
 type
   ToolContext = jaysonrpc.Context[MCP]

@@ -1,4 +1,4 @@
-import std/[json, options, tables, enumutils, sequtils, macros]
+import std/[json, options, tables, enumutils, sequtils, macros, times]
 import pkg/libdump
 
 # Utilities
@@ -7,6 +7,16 @@ type
   JsonDescrible = concept
     ## Any type that can be described in JSON
     proc generateSchema(inp: typedesc[Self]): JsonNode
+
+const timeFormat = "yyyy-MM-dd'T'HH:mm:sszzz"
+
+proc fromJsonHook*(time: var DateTime, data: JsonNode) =
+  ## Hook so dates use what our schema says
+  time = data.to(string).parse(timeFormat)
+
+proc toJsonHook*(time: DateTime): JsonNode =
+  ## Hook so dates use what our schema says
+  %time.format(timeFormat)
 
 # All container types first
 proc generateSchema*[T](typ: typedesc[seq[T]]): JsonNode
@@ -29,6 +39,9 @@ proc generateSchema*(typ: typedesc[SomeInteger]): JsonNode =
 
 proc generateSchema*(typ: typedesc[bool]): JsonNode =
   return %* {"type": "integer"}
+
+proc generateSchema*(typ: typedesc[DateTime]): JsonNode =
+  return %* {"type": "string", "format": "date-time"}
 
 proc generateSchema*(typ: typedesc[enum]): JsonNode =
   result = %* {"enum": typ.toSeq()}
